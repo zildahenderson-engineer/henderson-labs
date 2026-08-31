@@ -22,6 +22,13 @@
       "when": 1788193786237,
       "tag": "0002_vengeful_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1788201444154,
+      "tag": "0003_first_leper_queen",
+      "breakpoints": true
     }
   ]
 }

@@ -45,9 +45,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </div>;
   }
-  return <SidebarProvider defaultOpen>
+  return <SidebarProvider defaultOpen className="min-w-0">
     <AppSidebar />
-    <SidebarInset className="min-w-0 bg-[#f7f8f5]">{children}</SidebarInset>
+    <SidebarInset className="min-w-0 max-w-full overflow-x-hidden bg-[#f7f8f5] pt-14 md:pt-0">{children}</SidebarInset>
   </SidebarProvider>;
 }
 
@@ -87,6 +87,6 @@ function AppSidebar() {
         </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
-    {isMobile && <div className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-[#e7ebe6] bg-[#f7f8f5]/95 px-4 backdrop-blur"><SidebarTrigger className="rounded-lg" /><span className="text-sm font-semibold text-[#17211a]">{current}</span><CircleHelp className="ml-auto h-4 w-4 text-[#829087]" /></div>}
+    {isMobile && <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b border-[#e7ebe6] bg-[#f7f8f5]/95 px-4 backdrop-blur"><SidebarTrigger className="rounded-lg" /><span className="text-sm font-semibold text-[#17211a]">{current}</span><CircleHelp className="ml-auto h-4 w-4 text-[#829087]" /></div>}
   </>;
 }

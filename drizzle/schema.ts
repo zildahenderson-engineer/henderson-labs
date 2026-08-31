@@ -171,9 +171,10 @@ export const loyaltyTransactions = mysqlTable("loyalty_transactions", {
   customerId: int("customerId").notNull(),
   points: int("points").notNull(),
   reason: varchar("reason", { length: 180 }).notNull(),
+  automationKey: varchar("automationKey", { length: 180 }),
   createdByUserId: int("createdByUserId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, table => [index("loyalty_customer_idx").on(table.customerId, table.createdAt)]);
+}, table => [index("loyalty_customer_idx").on(table.customerId, table.createdAt), uniqueIndex("loyalty_automation_key_unique").on(table.automationKey)]);
 
 export const campaigns = mysqlTable("campaigns", {
   id: int("id").autoincrement().primaryKey(),
@@ -212,7 +213,7 @@ export const whatsappMessages = mysqlTable("whatsapp_messages", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [
   index("whatsapp_org_status_idx").on(table.organizationId, table.status),
-  index("whatsapp_provider_message_idx").on(table.providerMessageId),
+  uniqueIndex("whatsapp_provider_message_unique").on(table.providerMessageId),
 ]);
 
 export type User = typeof users.$inferSelect;

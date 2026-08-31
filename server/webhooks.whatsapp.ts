@@ -43,8 +43,12 @@ export async function receiveWhatsAppWebhook(req: Request, res: Response) {
           if (status === "delivered") update.deliveredAt = new Date(Number(statusEvent.timestamp || 0) * 1000 || Date.now());
           if (status === "read") update.readAt = new Date(Number(statusEvent.timestamp || 0) * 1000 || Date.now());
           if (status === "failed") update.errorMessage = JSON.stringify(statusEvent.errors ?? "Falha reportada pela Meta.");
-          await db.update(whatsappMessages).set(update).where(eq(whatsappMessages.id, message.id));
-          if (message.campaignId && status === "delivered" && !["delivered", "read"].includes(message.status)) {
+          const statusResult = await db.update(whatsappMessages).set(update).where(and(
+            eq(whatsappMessages.id, message.id),
+            status === "delivered" ? sql`${whatsappMessages.status} NOT IN ('delivered', 'read')` : sql`1 = 1`,
+          ));
+          const statusChanged = Number((statusResult as unknown as { affectedRows?: number }).affectedRows ?? 0) === 1;
+          if (message.campaignId && status === "delivered" && statusChanged) {
             await db.update(campaigns).set({ deliveredCount: sql`${campaigns.deliveredCount} + 1` }).where(and(eq(campaigns.id, message.campaignId), eq(campaigns.organizationId, message.organizationId)));
           }
         }
@@ -55,13 +59,15 @@ export async function receiveWhatsAppWebhook(req: Request, res: Response) {
           if (allCustomers.length !== 1) continue;
           const customer = allCustomers[0]!;
           const body = incoming.text?.body || `[${incoming.type || "message"}]`;
-          await db.insert(whatsappMessages).values({ organizationId: customer.organizationId, customerId: customer.id, direction: "inbound", messageType: "text", status: "received", body, createdAt: new Date(Number(incoming.timestamp || 0) * 1000 || Date.now()) });
+          const providerMessageId = typeof incoming.id === "string" ? incoming.id : null;
+          await db.insert(whatsappMessages).values({ organizationId: customer.organizationId, customerId: customer.id, direction: "inbound", messageType: "text", status: "received", providerMessageId, body, createdAt: new Date(Number(incoming.timestamp || 0) * 1000 || Date.now()) }).onDuplicateKeyUpdate({ set: { providerMessageId: sql`${whatsappMessages.providerMessageId}` } });
           await db.update(customers).set({ lastInteractionAt: new Date() }).where(and(eq(customers.id, customer.id), eq(customers.organizationId, customer.organizationId)));
         }
       }
     }
     return res.json({ ok: true });
   } catch (error) {
-    return res.status(500).json({ error: error instanceof Error ? error.message : "webhook-processing-failed" });
+    console.error("[WhatsApp] Webhook processing failed", error);
+    return res.status(500).json({ error: "webhook-processing-failed" });
   }
 }

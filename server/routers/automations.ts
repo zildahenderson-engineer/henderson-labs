@@ -89,14 +89,26 @@ export async function executeAutomation(organizationId: number, automation: Auto
     }
     if (ids.length && automation.actionType === "award_points") {
       const points = config.points ?? 10;
-      await db.update(customers).set({ points: sql`${customers.points} + ${points}` }).where(and(eq(customers.organizationId, organizationId), inArray(customers.id, ids)));
-      await db.insert(loyaltyTransactions).values(eligible.map(customer => ({
-        organizationId,
-        customerId: customer.id,
-        points,
-        reason: `Pontos concedidos pela automação “${automation.name}”.`,
-        createdByUserId: actorUserId ?? automation.createdByUserId,
-      })));
+      const newlyAwarded = await db.transaction(async tx => {
+        const awardedCustomers: Array<typeof customers.$inferSelect> = [];
+        for (const customer of eligible) {
+          const automationKey = `automation:${automation.id}:customer:${customer.id}`;
+          const inserted = await tx.insert(loyaltyTransactions).values({
+            organizationId,
+            customerId: customer.id,
+            points,
+            automationKey,
+            reason: `Pontos concedidos pela automação “${automation.name}”.`,
+            createdByUserId: actorUserId ?? automation.createdByUserId,
+          }).onDuplicateKeyUpdate({ set: { automationKey: sql`${loyaltyTransactions.automationKey}` } });
+          const affectedRows = Number((inserted as unknown as { affectedRows?: number }).affectedRows ?? 0);
+          if (affectedRows !== 1) continue;
+          await tx.update(customers).set({ points: sql`${customers.points} + ${points}` }).where(and(eq(customers.organizationId, organizationId), eq(customers.id, customer.id)));
+          awardedCustomers.push(customer);
+        }
+        return awardedCustomers;
+      });
+      eligible = newlyAwarded;
     }
 
     const actionLabel: Record<AutomationRecord["actionType"], string> = {
@@ -110,8 +122,8 @@ export async function executeAutomation(organizationId: number, automation: Auto
       organizationId,
       automationId: automation.id,
       status: "success",
-      affectedCount: ids.length,
-      message: `${ids.length} ${actionLabel[automation.actionType]}.`,
+      affectedCount: automation.actionType === "award_points" ? eligible.length : ids.length,
+      message: `${automation.actionType === "award_points" ? eligible.length : ids.length} ${actionLabel[automation.actionType]}.`,
       startedAt,
       finishedAt: new Date(),
     });

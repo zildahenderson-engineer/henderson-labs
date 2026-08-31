@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runScheduledAutomation } from "../scheduled-automations";
 import { receiveWhatsAppWebhook, verifyWhatsAppWebhook } from "../webhooks.whatsapp";
+import { sameOriginMutation } from "./security";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +42,13 @@ async function startServer() {
   app.post("/api/scheduled/run-automation", runScheduledAutomation);
   app.get("/api/webhooks/whatsapp", verifyWhatsAppWebhook);
   app.post("/api/webhooks/whatsapp", receiveWhatsAppWebhook);
+  app.use("/api/trpc", (req, res, next) => {
+    if (!sameOriginMutation(req)) {
+      res.status(403).json({ error: "cross-origin mutation rejected" });
+      return;
+    }
+    next();
+  });
   // tRPC API
   app.use(
     "/api/trpc",
