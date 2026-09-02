@@ -19,6 +19,30 @@ export function whatsappConfiguration() {
   };
 }
 
+/** Performs a read-only Graph API call to validate the configured sender. */
+export async function verifyOfficialWhatsAppCredentials() {
+  const config = whatsappConfiguration();
+  if (!config.configured) throw new WhatsAppNotConfiguredError();
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+  const endpoint = `https://graph.facebook.com/${config.graphVersion}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name`;
+  const response = await fetch(endpoint, {
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+  });
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const details = typeof raw === "object" && raw && "error" in raw ? JSON.stringify(raw) : "Erro não identificado pela Meta.";
+    throw new Error(`WhatsApp Cloud API recusou a validação: ${details}`);
+  }
+  const body = raw as { id?: string; display_phone_number?: string; verified_name?: string };
+  if (body.id !== phoneNumberId) throw new Error("WhatsApp Cloud API retornou um número diferente do configurado.");
+  return {
+    ok: true as const,
+    phoneNumberId,
+    displayPhoneNumber: body.display_phone_number ?? null,
+    verifiedName: body.verified_name ?? null,
+  };
+}
+
 function normalizePhone(phone: string) {
   return phone.replace(/[^0-9]/g, "");
 }
