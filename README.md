@@ -24,9 +24,9 @@ A arquitetura de dados aplica `organizationId` em todos os domínios de negócio
 | Fidelidade | Pontos, recompensas, ajustes auditáveis, cartão individual e página pública protegida por token opaco com QR Code. |
 | Campanhas | Rascunhos por público, template aprovado e métricas de envio. O disparo exige consentimento, telefone válido e credenciais oficiais. |
 | Relatórios | Visão financeira, desempenho de recuperação e campanhas, com exportação CSV de clientes. |
-| Configurações | Limites de risco, dados da organização, membros e status da integração oficial. |
+| Configurações | Limites de risco, dados da organização, membros, gerenciamento operacional de plano, exportação LGPD, anonimização e auditoria. |
 
-O banco também possui a tabela de mensagens WhatsApp para registrar identificador do provedor, estado da mensagem, falhas e timestamps de envio, entrega e leitura. A conexão com webhooks de status da Meta pode ser completada na próxima etapa sem alterar o domínio principal.
+O banco também possui a tabela de mensagens WhatsApp para registrar identificador do provedor, estado da mensagem, falhas e timestamps de envio, entrega e leitura. O webhook de status da Meta está conectado e deduplica replays por identificador do provedor.
 
 ## WhatsApp Business Platform
 
@@ -52,7 +52,7 @@ A interface permite executar uma regra imediatamente ou solicitar uma execução
 
 ## Banco, migrations e seed
 
-O schema está em `drizzle/schema.ts`. As migrations geradas estão em `drizzle/0001_shallow_ultron.sql` e `drizzle/0002_vengeful_bishop.sql`. Para desenvolvimento local, o seed é estritamente opt-in e bloqueia execução em `NODE_ENV=production`:
+O schema está em `drizzle/schema.ts`. As migrations geradas estão em `drizzle/0001_shallow_ultron.sql`, `drizzle/0002_vengeful_bishop.sql`, `drizzle/0003_first_leper_queen.sql` e `drizzle/0004_overconfident_dragon_man.sql`. A última adiciona a trilha `audit_logs` e metadados de consentimento e anonimização. Para desenvolvimento local, o seed é estritamente opt-in e bloqueia execução em `NODE_ENV=production`:
 
 ```bash
 pnpm db:seed
@@ -81,11 +81,11 @@ A estrutura de planos está pronta para limitar clientes, automações e usuári
 | Premium | R$ 1.500/mês | 10.000 | 30 | 15 |
 | Enterprise | A partir de R$ 2.500/mês | Conforme contrato | Conforme contrato | Conforme contrato |
 
-A cobrança ainda não foi conectada a um provedor de pagamentos. Isso é intencional: o MVP não simula uma assinatura real nem desbloqueia recursos por um pagamento fictício. A próxima etapa comercial pode conectar Stripe e usar os limites já centralizados em `server/routers/context.ts`.
+O gerenciamento operacional de plano está disponível para o proprietário em Configurações e altera os limites da organização com registro de auditoria. A cobrança ainda não foi conectada a um provedor de pagamentos: nenhuma ação de plano cria cobrança ou pagamento fictício. A próxima etapa comercial pode conectar Stripe e usar os limites já centralizados em `server/routers/context.ts`.
 
-## Privacidade
+## Privacidade e LGPD
 
-O consentimento para WhatsApp é uma propriedade explícita do cliente e é obrigatório para que ele entre como destinatário de uma campanha. O cartão público de pontos usa um token aleatório, não um ID sequencial, e expõe somente primeiro nome, saldo e recompensas. Segredos de integração devem permanecer no ambiente server-side; não adicione tokens ao código ou ao cliente.
+O consentimento para WhatsApp é uma propriedade explícita do cliente, com data, origem e versão registradas, e é obrigatório para que ele entre como destinatário de uma campanha. Gestores podem exportar os dados operacionais da organização em JSON; a exportação não inclui tokens internos nem secrets. A anonimização exige perfil de gestor ou proprietário, motivo, confirmação na interface e registra um evento de auditoria. O cartão público de pontos usa um token aleatório, não um ID sequencial, e expõe somente primeiro nome, saldo e recompensas. Segredos de integração devem permanecer no ambiente server-side; não adicione tokens ao código ou ao cliente.
 
 ## Referência
 

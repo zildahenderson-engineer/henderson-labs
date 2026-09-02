@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { campaigns, customers, organizationMembers, organizations, recoveryCases, users } from "../../drizzle/schema";
+import { auditLogs, campaigns, customers, customerActivities, organizationMembers, organizations, recoveryCases, users } from "../../drizzle/schema";
 import { dashboardMetrics, getDb, recentCustomersByStatus } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { assertCanManage, assertOwner, organizationContext, PLAN_LIMITS } from "./context";
@@ -33,6 +33,18 @@ export const organizationRouter = router({
     return { success: true };
   }),
 
+  changePlan: protectedProcedure.input(z.object({ plan: z.enum(["basic", "professional", "premium", "enterprise"]) })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertOwner(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    await db.transaction(async tx => {
+      await tx.update(organizations).set({ plan: input.plan }).where(eq(organizations.id, organization.id));
+      await tx.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "organization.plan_changed", entityType: "organization", entityId: organization.id, metadata: { from: organization.plan, to: input.plan, billing: "not_connected" } });
+    });
+    return { success: true, plan: input.plan, billingConnected: false };
+  }),
+
   members: protectedProcedure.query(async ({ ctx }) => {
     const { organization } = await orgFor(ctx);
     const db = await getDb();
@@ -40,6 +52,28 @@ export const organizationRouter = router({
     return db.select({ member: organizationMembers, user: { id: users.id, name: users.name, email: users.email } }).from(organizationMembers)
       .innerJoin(users, eq(users.id, organizationMembers.userId))
       .where(eq(organizationMembers.organizationId, organization.id));
+  }),
+
+  exportData: protectedProcedure.query(async ({ ctx }) => {
+    const { organization, membership } = await orgFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A exportação exige perfil de gestor ou proprietário." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    const [organizationData, customerData, activityData] = await Promise.all([
+      db.select({ id: organizations.id, name: organizations.name, slug: organizations.slug, segment: organizations.segment, plan: organizations.plan, timezone: organizations.timezone, createdAt: organizations.createdAt }).from(organizations).where(eq(organizations.id, organization.id)),
+      db.select({ id: customers.id, name: customers.name, phone: customers.phone, email: customers.email, status: customers.status, pipelineStage: customers.pipelineStage, registeredAt: customers.registeredAt, lastPurchaseAt: customers.lastPurchaseAt, totalSpent: customers.totalSpent, points: customers.points, consentWhatsapp: customers.consentWhatsapp, consentAt: customers.consentAt, consentSource: customers.consentSource, anonymizedAt: customers.anonymizedAt }).from(customers).where(eq(customers.organizationId, organization.id)),
+      db.select({ id: customerActivities.id, customerId: customerActivities.customerId, type: customerActivities.type, content: customerActivities.content, amount: customerActivities.amount, createdAt: customerActivities.createdAt }).from(customerActivities).where(eq(customerActivities.organizationId, organization.id)),
+    ]);
+    await db.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "organization.data_exported", entityType: "organization", entityId: organization.id });
+    return { exportedAt: new Date(), organization: organizationData[0] ?? null, customers: customerData, activities: activityData };
+  }),
+
+  auditLogs: protectedProcedure.query(async ({ ctx }) => {
+    const { organization, membership } = await orgFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A auditoria exige perfil de gestor ou proprietário." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    return db.select({ id: auditLogs.id, action: auditLogs.action, entityType: auditLogs.entityType, entityId: auditLogs.entityId, metadata: auditLogs.metadata, createdAt: auditLogs.createdAt }).from(auditLogs).where(eq(auditLogs.organizationId, organization.id)).orderBy(desc(auditLogs.createdAt)).limit(50);
   }),
 
   addExistingMember: protectedProcedure.input(z.object({

@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { customers, customerActivities } from "../../drizzle/schema";
+import { auditLogs, customers, customerActivities, tasks, recoveryCases, loyaltyTransactions, whatsappMessages } from "../../drizzle/schema";
 import { getCustomer, getCustomerDetail, getDb, listCustomers } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { assertCanEdit, organizationContext } from "./context";
@@ -58,6 +58,9 @@ export const customersRouter = router({
       points: input.points ?? 0,
       loyaltyToken: nanoid(32),
       consentWhatsapp: input.consentWhatsapp ?? false,
+      consentAt: input.consentWhatsapp ? new Date() : null,
+      consentSource: input.consentWhatsapp ? "cadastro_manual" : null,
+      consentVersion: input.consentWhatsapp ? "2026-09-02" : null,
       pipelineStage: input.pipelineStage ?? "new",
       status: "active",
     }).$returningId();
@@ -69,6 +72,9 @@ export const customersRouter = router({
       content: "Cliente cadastrado no Henderson Labs.",
       createdByUserId: ctx.user.id,
     });
+    if (input.consentWhatsapp !== undefined) {
+      await db.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: input.consentWhatsapp ? "customer.whatsapp_consent_granted" : "customer.whatsapp_consent_revoked", entityType: "customer", entityId: customerId, metadata: { source: "cadastro_manual", version: "2026-09-02" } });
+    }
     return { id: customerId };
   }),
 
@@ -77,6 +83,7 @@ export const customersRouter = router({
     assertCanEdit(membership.role);
     const customer = await getCustomer(organization.id, input.id);
     if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+    if (customer.anonymizedAt) throw new TRPCError({ code: "CONFLICT", message: "Este cliente já foi anonimizado e não pode ser reidentificado." });
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     const { id, ...data } = input;
@@ -88,10 +95,18 @@ export const customersRouter = router({
     if (data.lastPurchaseAt !== undefined) updateSet.lastPurchaseAt = data.lastPurchaseAt;
     if (data.totalSpent !== undefined) updateSet.totalSpent = String(data.totalSpent);
     if (data.points !== undefined) updateSet.points = data.points;
-    if (data.consentWhatsapp !== undefined) updateSet.consentWhatsapp = data.consentWhatsapp;
+    if (data.consentWhatsapp !== undefined) {
+      updateSet.consentWhatsapp = data.consentWhatsapp;
+      updateSet.consentAt = data.consentWhatsapp ? new Date() : null;
+      updateSet.consentSource = data.consentWhatsapp ? "edicao_manual" : null;
+      updateSet.consentVersion = data.consentWhatsapp ? "2026-09-02" : null;
+    }
     if (data.pipelineStage !== undefined) updateSet.pipelineStage = data.pipelineStage;
     if (Object.keys(updateSet).length) {
       await db.update(customers).set(updateSet).where(and(eq(customers.id, id), eq(customers.organizationId, organization.id)));
+    }
+    if (data.consentWhatsapp !== undefined) {
+      await db.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: data.consentWhatsapp ? "customer.whatsapp_consent_granted" : "customer.whatsapp_consent_revoked", entityType: "customer", entityId: id, metadata: { source: "edicao_manual", version: "2026-09-02" } });
     }
     return { success: true };
   }),
@@ -166,5 +181,38 @@ export const customersRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     return db.select().from(customerActivities).where(and(eq(customerActivities.organizationId, organization.id), eq(customerActivities.customerId, input.id))).orderBy(desc(customerActivities.createdAt)).limit(40);
+  }),
+
+  anonymize: protectedProcedure.input(z.object({ id: z.number().int().positive(), reason: z.string().trim().min(5).max(300) })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await contextFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A anonimização exige perfil de gestor ou proprietário." });
+    const customer = await getCustomer(organization.id, input.id);
+    if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    const now = new Date();
+    await db.transaction(async tx => {
+      await tx.update(customers).set({ name: "Cliente anonimizado", phone: null, email: null, notes: null, status: "inactive", pipelineStage: "new", totalSpent: "0", points: 0, loyaltyToken: nanoid(32), consentWhatsapp: false, consentAt: null, consentSource: "lgpd_anonimizacao", consentVersion: null, anonymizedAt: now, lastPurchaseAt: null, lastInteractionAt: null }).where(and(eq(customers.id, input.id), eq(customers.organizationId, organization.id)));
+      await tx.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "customer.anonymized", entityType: "customer", entityId: input.id, metadata: { reason: input.reason } });
+    });
+    return { success: true };
+  }),
+
+  exportData: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
+    const { organization, membership } = await contextFor(ctx);
+    if (membership.role === "viewer") throw new TRPCError({ code: "FORBIDDEN", message: "A exportação exige permissão operacional." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    const customer = (await db.select().from(customers).where(and(eq(customers.id, input.id), eq(customers.organizationId, organization.id))).limit(1))[0];
+    if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+    const [activities, customerTasks, recoveries, points, messages] = await Promise.all([
+      db.select().from(customerActivities).where(and(eq(customerActivities.customerId, input.id), eq(customerActivities.organizationId, organization.id))),
+      db.select().from(tasks).where(and(eq(tasks.customerId, input.id), eq(tasks.organizationId, organization.id))),
+      db.select().from(recoveryCases).where(and(eq(recoveryCases.customerId, input.id), eq(recoveryCases.organizationId, organization.id))),
+      db.select().from(loyaltyTransactions).where(and(eq(loyaltyTransactions.customerId, input.id), eq(loyaltyTransactions.organizationId, organization.id))),
+      db.select().from(whatsappMessages).where(and(eq(whatsappMessages.customerId, input.id), eq(whatsappMessages.organizationId, organization.id))),
+    ]);
+    await db.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "customer.data_exported", entityType: "customer", entityId: input.id });
+    return { exportedAt: new Date(), customer, activities, tasks: customerTasks, recoveries, loyaltyTransactions: points, whatsappMessages: messages };
   }),
 });

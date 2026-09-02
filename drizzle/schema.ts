@@ -65,6 +65,10 @@ export const customers = mysqlTable("customers", {
   notes: text("notes"),
   lastInteractionAt: timestamp("lastInteractionAt"),
   consentWhatsapp: boolean("consentWhatsapp").default(false).notNull(),
+  consentAt: timestamp("consentAt"),
+  consentSource: varchar("consentSource", { length: 120 }),
+  consentVersion: varchar("consentVersion", { length: 32 }),
+  anonymizedAt: timestamp("anonymizedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
@@ -215,6 +219,17 @@ export const whatsappMessages = mysqlTable("whatsapp_messages", {
   index("whatsapp_org_status_idx").on(table.organizationId, table.status),
   uniqueIndex("whatsapp_provider_message_unique").on(table.providerMessageId),
 ]);
+
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  actorUserId: int("actorUserId"),
+  action: varchar("action", { length: 80 }).notNull(),
+  entityType: varchar("entityType", { length: 80 }),
+  entityId: int("entityId"),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("audit_org_created_idx").on(table.organizationId, table.createdAt), index("audit_entity_idx").on(table.entityType, table.entityId)]);
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

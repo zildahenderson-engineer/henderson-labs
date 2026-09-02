@@ -29,6 +29,13 @@
       "when": 1788201444154,
       "tag": "0003_first_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1788369764291,
+      "tag": "0004_overconfident_dragon_man",
+      "breakpoints": true
     }
   ]
 }
