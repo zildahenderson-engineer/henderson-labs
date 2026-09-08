@@ -1,10 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { auditLogs, campaigns, customers, customerActivities, organizationMembers, organizations, recoveryCases, users } from "../../drizzle/schema";
+import { nanoid } from "nanoid";
+import { auditLogs, billingPayments, campaigns, customers, customerActivities, organizationMembers, organizations, recoveryCases, users } from "../../drizzle/schema";
 import { dashboardMetrics, getDb, recentCustomersByStatus } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { assertCanManage, assertOwner, organizationContext, PLAN_LIMITS } from "./context";
+import { ASAAS_PLAN_PRICES, asaasConfiguration, createAsaasCheckout } from "../services.asaas";
 
 async function orgFor(ctx: { user: unknown }) {
   return organizationContext(ctx.user as { id: number; name: string | null; email: string | null });
@@ -33,16 +35,33 @@ export const organizationRouter = router({
     return { success: true };
   }),
 
-  changePlan: protectedProcedure.input(z.object({ plan: z.enum(["basic", "professional", "premium", "enterprise"]) })).mutation(async ({ ctx, input }) => {
+  createPlanCheckout: protectedProcedure.input(z.object({ plan: z.enum(["basic", "professional", "premium"]) })).mutation(async ({ ctx, input }) => {
     const { organization, membership } = await orgFor(ctx);
     assertOwner(membership.role);
+    if (!asaasConfiguration().configured) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "O gateway Asaas ainda não está configurado." });
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
-    await db.transaction(async tx => {
-      await tx.update(organizations).set({ plan: input.plan }).where(eq(organizations.id, organization.id));
-      await tx.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "organization.plan_changed", entityType: "organization", entityId: organization.id, metadata: { from: organization.plan, to: input.plan, billing: "not_connected" } });
-    });
-    return { success: true, plan: input.plan, billingConnected: false };
+    const externalReference = `org_${organization.id}_plan_${nanoid(20)}`;
+    const created = await db.insert(billingPayments).values({ organizationId: organization.id, requestedPlan: input.plan, previousPlan: organization.plan, amount: String(ASAAS_PLAN_PRICES[input.plan]), externalReference });
+    const paymentId = Number(created[0].insertId);
+    try {
+      const host = ctx.req.get("host");
+      if (!host) throw new Error("Host da aplicação indisponível.");
+      const protocol = ctx.req.headers["x-forwarded-proto"] === "http" ? "http" : "https";
+      const checkout = await createAsaasCheckout({ externalReference, plan: input.plan, appUrl: `${protocol}://${host}` });
+      await db.update(billingPayments).set({ checkoutId: checkout.id }).where(eq(billingPayments.id, paymentId));
+      return { success: true, checkoutUrl: checkout.link, paymentId, environment: asaasConfiguration().environment };
+    } catch (error) {
+      await db.update(billingPayments).set({ status: "failed" }).where(eq(billingPayments.id, paymentId));
+      throw new TRPCError({ code: "BAD_GATEWAY", message: error instanceof Error ? error.message : "Não foi possível criar o checkout Asaas." });
+    }
+  }),
+
+  billingStatus: protectedProcedure.query(async ({ ctx }) => {
+    const { organization } = await orgFor(ctx);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    return { asaas: asaasConfiguration(), payments: await db.select({ id: billingPayments.id, requestedPlan: billingPayments.requestedPlan, amount: billingPayments.amount, status: billingPayments.status, checkoutId: billingPayments.checkoutId, createdAt: billingPayments.createdAt, paidAt: billingPayments.paidAt }).from(billingPayments).where(eq(billingPayments.organizationId, organization.id)).orderBy(desc(billingPayments.createdAt)).limit(10) };
   }),
 
   members: protectedProcedure.query(async ({ ctx }) => {

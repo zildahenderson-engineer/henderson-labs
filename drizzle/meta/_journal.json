@@ -36,6 +36,13 @@
       "when": 1788369764291,
       "tag": "0004_overconfident_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1788373778253,
+      "tag": "0005_easy_wendigo",
+      "breakpoints": true
     }
   ]
 }

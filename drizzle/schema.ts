@@ -231,5 +231,30 @@ export const auditLogs = mysqlTable("audit_logs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [index("audit_org_created_idx").on(table.organizationId, table.createdAt), index("audit_entity_idx").on(table.entityType, table.entityId)]);
 
+export const billingPayments = mysqlTable("billing_payments", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  requestedPlan: mysqlEnum("requestedPlan", ["basic", "professional", "premium"]).notNull(),
+  previousPlan: mysqlEnum("previousPlan", ["basic", "professional", "premium", "enterprise"]),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("BRL").notNull(),
+  checkoutId: varchar("checkoutId", { length: 100 }),
+  providerPaymentId: varchar("providerPaymentId", { length: 100 }),
+  externalReference: varchar("externalReference", { length: 200 }).notNull().unique(),
+  status: mysqlEnum("status", ["pending", "confirmed", "received", "overdue", "cancelled", "refunded", "failed"]).default("pending").notNull(),
+  lastEventId: varchar("lastEventId", { length: 180 }),
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("billing_org_status_idx").on(table.organizationId, table.status), uniqueIndex("billing_provider_payment_unique").on(table.providerPaymentId), index("billing_event_idx").on(table.lastEventId)]);
+
+export const asaasWebhookEvents = mysqlTable("asaas_webhook_events", {
+  id: int("id").autoincrement().primaryKey(),
+  eventId: varchar("eventId", { length: 180 }).notNull().unique(),
+  event: varchar("event", { length: 100 }).notNull(),
+  providerPaymentId: varchar("providerPaymentId", { length: 100 }),
+  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+}, table => [index("asaas_event_payment_idx").on(table.providerPaymentId)]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
