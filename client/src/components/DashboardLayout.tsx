@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { BarChart3, Bot, ChevronRight, CircleHelp, HeartHandshake, LayoutDashboard, LogOut, Megaphone, Settings, Sparkles, Users, UserRoundCog, WalletCards, Workflow } from "lucide-react";
+import { BarChart3, Bot, ChevronRight, CircleHelp, HeartHandshake, LayoutDashboard, LogOut, Megaphone, Settings, ShieldCheck, Sparkles, Users, UserRoundCog, WalletCards, Workflow } from "lucide-react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
@@ -72,6 +72,7 @@ function AppSidebar() {
             </SidebarMenuItem>)}
           </SidebarMenu>
         </div>)}
+        {user?.role === "admin" && <div className="mt-5 border-t border-white/10 pt-4"><p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#778f7c] group-data-[collapsible=icon]:hidden">Proprietário</p><SidebarMenu><SidebarMenuItem><SidebarMenuButton tooltip="Console do proprietário" isActive={location === "/owner"} onClick={() => setLocation("/owner")} className="h-10 rounded-xl text-[#d7fe70] hover:bg-white/10 data-[active=true]:bg-[#d7fe70] data-[active=true]:text-[#18221a]"><ShieldCheck className="h-4 w-4" /><span>Console global</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu></div>}
       </SidebarContent>
       <SidebarFooter className="p-3">
         <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3 group-data-[collapsible=icon]:hidden">
