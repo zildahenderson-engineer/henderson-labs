@@ -9,7 +9,6 @@ import { loyaltyRouter } from "./routers/loyalty";
 import { organizationRouter, reportsRouter } from "./routers/organization";
 import { recoveryRouter } from "./routers/recovery";
 import { tasksRouter } from "./routers/tasks";
-import { ownerRouter } from "./routers/owner";
 
 export const appRouter = router({
   system: systemRouter,
@@ -29,7 +28,6 @@ export const appRouter = router({
   loyalty: loyaltyRouter,
   campaigns: campaignsRouter,
   reports: reportsRouter,
-  owner: ownerRouter,
 });
 
 export type AppRouter = typeof appRouter;
