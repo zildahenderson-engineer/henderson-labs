@@ -57,6 +57,19 @@ export const organizationRouter = router({
     }
   }),
 
+  changePlan: protectedProcedure.input(z.object({ plan: z.enum(["basic", "professional", "premium"]) })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertOwner(membership.role);
+    if (organization.plan === input.plan) return { success: true, changed: false as const, plan: input.plan };
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    await db.transaction(async tx => {
+      await tx.update(organizations).set({ plan: input.plan }).where(eq(organizations.id, organization.id));
+      await tx.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "organization.plan_changed_without_payment", entityType: "organization", entityId: organization.id, metadata: { from: organization.plan, to: input.plan, reason: "Alteração administrativa sem cobrança online." } });
+    });
+    return { success: true, changed: true as const, plan: input.plan };
+  }),
+
   billingStatus: protectedProcedure.query(async ({ ctx }) => {
     const { organization } = await orgFor(ctx);
     const db = await getDb();

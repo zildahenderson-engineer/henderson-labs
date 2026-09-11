@@ -111,6 +111,25 @@ export const customersRouter = router({
     return { success: true };
   }),
 
+  delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), reason: z.string().trim().min(5).max(300) })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await contextFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A exclusão exige perfil de gestor ou proprietário." });
+    const customer = await getCustomer(organization.id, input.id);
+    if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+    await db.transaction(async tx => {
+      await tx.delete(customerActivities).where(and(eq(customerActivities.customerId, input.id), eq(customerActivities.organizationId, organization.id)));
+      await tx.delete(tasks).where(and(eq(tasks.customerId, input.id), eq(tasks.organizationId, organization.id)));
+      await tx.delete(recoveryCases).where(and(eq(recoveryCases.customerId, input.id), eq(recoveryCases.organizationId, organization.id)));
+      await tx.delete(loyaltyTransactions).where(and(eq(loyaltyTransactions.customerId, input.id), eq(loyaltyTransactions.organizationId, organization.id)));
+      await tx.delete(whatsappMessages).where(and(eq(whatsappMessages.customerId, input.id), eq(whatsappMessages.organizationId, organization.id)));
+      await tx.delete(customers).where(and(eq(customers.id, input.id), eq(customers.organizationId, organization.id)));
+      await tx.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "customer.deleted", entityType: "customer", entityId: input.id, metadata: { reason: input.reason, name: customer.name } });
+    });
+    return { success: true } as const;
+  }),
+
   addNote: protectedProcedure.input(z.object({ id: z.number().int().positive(), content: z.string().trim().min(2).max(4000) })).mutation(async ({ ctx, input }) => {
     const { organization, membership } = await contextFor(ctx);
     assertCanEdit(membership.role);
