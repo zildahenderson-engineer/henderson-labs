@@ -45,6 +45,32 @@ export const campaignsRouter = router({
     return { id: created[0]!.id };
   }),
 
+  update: protectedProcedure.input(campaignInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertCanEdit(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const existing = (await db.select().from(campaigns).where(and(eq(campaigns.id, input.id), eq(campaigns.organizationId, organization.id))).limit(1))[0];
+    if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Campanha não encontrada." });
+    if (existing.status === "sent") throw new TRPCError({ code: "CONFLICT", message: "Campanhas já enviadas não podem ser editadas." });
+    const { id: _id, ...data } = input;
+    await db.update(campaigns).set(data).where(and(eq(campaigns.id, input.id), eq(campaigns.organizationId, organization.id)));
+    return { success: true } as const;
+  }),
+
+  delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A exclusão exige perfil de gestor ou proprietário." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const campaign = (await db.select().from(campaigns).where(and(eq(campaigns.id, input.id), eq(campaigns.organizationId, organization.id))).limit(1))[0];
+    if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "Campanha não encontrada." });
+    if (campaign.status === "sent") throw new TRPCError({ code: "CONFLICT", message: "Campanhas já enviadas não podem ser excluídas." });
+    await db.delete(whatsappMessages).where(and(eq(whatsappMessages.campaignId, input.id), eq(whatsappMessages.organizationId, organization.id)));
+    await db.delete(campaigns).where(and(eq(campaigns.id, input.id), eq(campaigns.organizationId, organization.id)));
+    return { success: true } as const;
+  }),
+
   dispatch: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const { organization, membership } = await orgFor(ctx);
     assertCanEdit(membership.role);

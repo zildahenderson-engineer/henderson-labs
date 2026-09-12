@@ -12,9 +12,9 @@ A arquitetura de dados aplica `organizationId` em todos os domínios de negócio
 
 | Módulo | O que já funciona |
 | --- | --- |
-| Landing page | Posicionamento comercial, navegação, CTAs e apresentação do método Henderson Labs. |
+| Landing page | Posicionamento comercial, calculadora de ROI, Henderson AI, WhatsApp, planos, FAQ e CTAs de teste. |
 | Autenticação | Login Manus OAuth, proteção do painel e logout. |
-| Dashboard | Indicadores de clientes ativos, risco, inativos, recuperados, receita, campanhas, mensagens e tarefas. Os gráficos usam dados reais da organização. |
+| Dashboard | Indicadores de clientes ativos, risco, inativos, recuperados, receita, campanhas, mensagens e tarefas, além de insights determinísticos da Henderson AI. |
 | Clientes | Cadastro, busca, filtro por status, histórico, observações, compra registrada, consentimento de WhatsApp e atualização de risco. |
 | Perfil do cliente | Linha do tempo, follow-ups, histórico financeiro, pontos e jornada de recuperação. |
 | CRM | Pipeline Novo → Em contato → Interessado → Cliente → Recorrente com movimentação de cards. |
@@ -25,6 +25,8 @@ A arquitetura de dados aplica `organizationId` em todos os domínios de negócio
 | Campanhas | Rascunhos por público, template aprovado e métricas de envio. O disparo exige consentimento, telefone válido e credenciais oficiais. |
 | Relatórios | Visão financeira, desempenho de recuperação e campanhas, com exportação CSV de clientes. |
 | Configurações | Limites de risco, dados da organização, membros, gerenciamento operacional de plano, exportação LGPD, anonimização e auditoria. |
+| Henderson AI | Chat de negócio com histórico, function-calling somente leitura, respostas fundamentadas nos dados da organização, ferramentas consultadas e controle de uso. |
+| Onboarding | Wizard inicial de três passos para empresa, canais e primeira automação, concluído de forma auditável. |
 
 O banco também possui a tabela de mensagens WhatsApp para registrar identificador do provedor, estado da mensagem, falhas e timestamps de envio, entrega e leitura. O webhook de status da Meta está conectado e deduplica replays por identificador do provedor.
 
@@ -52,7 +54,7 @@ A interface permite executar uma regra imediatamente ou solicitar uma execução
 
 ## Banco, migrations e seed
 
-O schema está em `drizzle/schema.ts`. As migrations geradas estão em `drizzle/0001_shallow_ultron.sql`, `drizzle/0002_vengeful_bishop.sql`, `drizzle/0003_first_leper_queen.sql` e `drizzle/0004_overconfident_dragon_man.sql`. A última adiciona a trilha `audit_logs` e metadados de consentimento e anonimização. Para desenvolvimento local, o seed é estritamente opt-in e bloqueia execução em `NODE_ENV=production`:
+O schema está em `drizzle/schema.ts`. Além das migrations anteriores, `drizzle/0006_zippy_liz_osborn.sql` cria as tabelas `ai_conversations`, `ai_messages`, `ai_usage` e o marcador `organizations.onboardingCompletedAt`. A migration já foi aplicada ao banco gerenciado desta versão. Para desenvolvimento local, o seed é estritamente opt-in e bloqueia execução em `NODE_ENV=production`:
 
 ```bash
 pnpm db:seed
@@ -81,7 +83,7 @@ A estrutura de planos está pronta para limitar clientes, automações e usuári
 | Premium | R$ 1.500/mês | 10.000 | 30 | 15 |
 | Enterprise | A partir de R$ 2.500/mês | Conforme contrato | Conforme contrato | Conforme contrato |
 
-O gerenciamento operacional de plano está disponível para o proprietário em Configurações e altera os limites da organização com registro de auditoria. A cobrança ainda não foi conectada a um provedor de pagamentos: nenhuma ação de plano cria cobrança ou pagamento fictício. A próxima etapa comercial pode conectar Stripe e usar os limites já centralizados em `server/routers/context.ts`.
+O gerenciamento de plano está disponível para o proprietário em Configurações. A ação principal cria um checkout hospedado pelo Asaas e só muda o plano após o evento de pagamento confirmado; o ajuste administrativo sem cobrança permanece separado e auditado para suporte interno.
 
 ## Privacidade e LGPD
 

@@ -30,6 +30,8 @@ export type Message = {
   content: MessageContent | MessageContent[];
   name?: string;
   tool_call_id?: string;
+  /** Present on assistant messages that requested tool calls, so they can be replayed in history. */
+  tool_calls?: ToolCall[];
 };
 
 export type Tool = {
@@ -140,7 +142,7 @@ const normalizeContentPart = (
 };
 
 const normalizeMessage = (message: Message) => {
-  const { role, name, tool_call_id } = message;
+  const { role, name, tool_call_id, tool_calls } = message;
 
   if (role === "tool" || role === "function") {
     const content = ensureArray(message.content)
@@ -152,6 +154,20 @@ const normalizeMessage = (message: Message) => {
       name,
       tool_call_id,
       content,
+    };
+  }
+
+  // Assistant messages that requested tool calls may have empty/no content;
+  // tool_calls must be replayed so the model sees why the tool results exist.
+  if (role === "assistant" && tool_calls && tool_calls.length > 0) {
+    const content = ensureArray(message.content ?? "")
+      .map(normalizeContentPart)
+      .filter((part): part is TextContent => part.type === "text" && part.text.length > 0);
+    return {
+      role,
+      name,
+      content: content.length ? content[0].text : null,
+      tool_calls,
     };
   }
 

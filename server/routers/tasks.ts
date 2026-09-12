@@ -4,7 +4,7 @@ import { z } from "zod";
 import { customerActivities, tasks } from "../../drizzle/schema";
 import { getCustomer, getDb, listTasks } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
-import { assertCanEdit, organizationContext } from "./context";
+import { assertCanEdit, assertCanManage, organizationContext } from "./context";
 
 async function orgFor(ctx: { user: unknown }) {
   return organizationContext(ctx.user as { id: number; name: string | null; email: string | null });
@@ -47,6 +47,31 @@ export const tasksRouter = router({
       createdByUserId: ctx.user.id,
     });
     return { id: created[0]!.id };
+  }),
+
+  update: protectedProcedure.input(z.object({ id: z.number().int().positive(), customerId: z.number().int().positive().optional().nullable(), title: z.string().trim().min(3).max(220).optional(), description: z.string().trim().max(4000).optional().nullable(), dueAt: z.coerce.date().optional().nullable(), priority: z.enum(["low", "medium", "high"]).optional(), status: z.enum(["open", "done", "cancelled"]).optional() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertCanEdit(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    if (input.customerId && !await getCustomer(organization.id, input.customerId)) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+    const existing = (await db.select().from(tasks).where(and(eq(tasks.id, input.id), eq(tasks.organizationId, organization.id))).limit(1))[0];
+    if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada." });
+    const { id: _id, ...data } = input;
+    const updateSet: Record<string, unknown> = { ...data };
+    if (input.status === "done") updateSet.completedAt = new Date();
+    await db.update(tasks).set(updateSet).where(and(eq(tasks.id, input.id), eq(tasks.organizationId, organization.id)));
+    return { success: true } as const;
+  }),
+
+  delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertCanManage(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const result = await db.delete(tasks).where(and(eq(tasks.id, input.id), eq(tasks.organizationId, organization.id)));
+    if (Number((result as unknown as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa não encontrada." });
+    return { success: true } as const;
   }),
 
   complete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {

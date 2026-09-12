@@ -53,6 +53,27 @@ export const loyaltyRouter = router({
     return { id: created[0]!.id };
   }),
 
+  updateReward: protectedProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().trim().min(3).max(160).optional(), description: z.string().trim().max(1200).optional().nullable(), pointsCost: z.coerce.number().int().min(1).max(9_999_999).optional(), couponCode: z.string().trim().max(64).optional().nullable(), active: z.boolean().optional() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertCanEdit(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const { id: _id, ...data } = input;
+    const result = await db.update(loyaltyRewards).set(data).where(and(eq(loyaltyRewards.id, input.id), eq(loyaltyRewards.organizationId, organization.id)));
+    if (Number((result as unknown as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Recompensa não encontrada." });
+    return { success: true } as const;
+  }),
+
+  deleteReward: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A exclusão exige perfil de gestor ou proprietário." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const result = await db.delete(loyaltyRewards).where(and(eq(loyaltyRewards.id, input.id), eq(loyaltyRewards.organizationId, organization.id)));
+    if (Number((result as unknown as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Recompensa não encontrada." });
+    return { success: true } as const;
+  }),
+
   adjustPoints: protectedProcedure.input(z.object({
     customerId: z.number().int().positive(),
     points: z.coerce.number().int().refine(value => value !== 0 && value >= -100000 && value <= 100000, "Use um ajuste entre -100.000 e 100.000 pontos."),

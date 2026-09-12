@@ -179,6 +179,34 @@ export const automationsRouter = router({
     return { id: created[0]!.id };
   }),
 
+  update: protectedProcedure.input(automationInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertCanEdit(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const existing = (await db.select().from(automations).where(and(eq(automations.id, input.id), eq(automations.organizationId, organization.id))).limit(1))[0];
+    if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Automação não encontrada." });
+    const { id: _id, ...data } = input;
+    await db.update(automations).set(data).where(and(eq(automations.id, input.id), eq(automations.organizationId, organization.id)));
+    return { success: true } as const;
+  }),
+
+  delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A exclusão exige perfil de gestor ou proprietário." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const automation = (await db.select().from(automations).where(and(eq(automations.id, input.id), eq(automations.organizationId, organization.id))).limit(1))[0];
+    if (!automation) throw new TRPCError({ code: "NOT_FOUND", message: "Automação não encontrada." });
+    if (automation.scheduleCronTaskUid) {
+      const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+      await deleteHeartbeatJob(automation.scheduleCronTaskUid, sessionToken);
+    }
+    await db.delete(automationRuns).where(and(eq(automationRuns.automationId, input.id), eq(automationRuns.organizationId, organization.id)));
+    await db.delete(automations).where(and(eq(automations.id, input.id), eq(automations.organizationId, organization.id)));
+    return { success: true } as const;
+  }),
+
   toggle: protectedProcedure.input(z.object({ id: z.number().int().positive(), enabled: z.boolean() })).mutation(async ({ ctx, input }) => {
     const { organization, membership } = await orgFor(ctx);
     assertCanEdit(membership.role);

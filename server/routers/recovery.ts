@@ -75,6 +75,16 @@ export const recoveryRouter = router({
     return { success: true };
   }),
 
+  delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    if (membership.role !== "owner" && membership.role !== "manager") throw new TRPCError({ code: "FORBIDDEN", message: "A exclusão exige perfil de gestor ou proprietário." });
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const result = await db.delete(recoveryCases).where(and(eq(recoveryCases.id, input.id), eq(recoveryCases.organizationId, organization.id)));
+    if (Number((result as unknown as { affectedRows?: number }).affectedRows ?? 0) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "Caso de recuperação não encontrado." });
+    return { success: true } as const;
+  }),
+
   createForCustomer: protectedProcedure.input(z.object({ customerId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const { organization, membership } = await orgFor(ctx);
     assertCanEdit(membership.role);

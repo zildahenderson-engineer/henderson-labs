@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
+import { HendersonAIPage } from "./pages/HendersonAIPage";
 import { AutomationsPage, CampaignsPage, CrmPage, CustomerDetailPage, CustomersPage, DashboardPage, LoyaltyPage, LoyaltyQrPage, PublicLoyaltyPage, RecoveryPage, ReportsPage, SettingsPage, TasksPage } from "./pages/AppPages";
 import { Route, Switch } from "wouter";
 
@@ -14,6 +15,7 @@ function Router() {
     <Route path="/" component={Home} />
     <Route path="/pontos/:token" component={PublicLoyaltyPage} />
     <Route path="/app" component={() => <AppRoute><DashboardPage /></AppRoute>} />
+    <Route path="/app/ai" component={() => <AppRoute><HendersonAIPage /></AppRoute>} />
     <Route path="/app/clientes/:id" component={() => <AppRoute><CustomerDetailPage /></AppRoute>} />
     <Route path="/app/clientes" component={() => <AppRoute><CustomersPage /></AppRoute>} />
     <Route path="/app/crm" component={() => <AppRoute><CrmPage /></AppRoute>} />

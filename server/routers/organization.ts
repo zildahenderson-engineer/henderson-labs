@@ -18,6 +18,16 @@ export const organizationRouter = router({
     return { organization, membership, limits: PLAN_LIMITS[organization.plan] };
   }),
 
+  completeOnboarding: protectedProcedure.input(z.object({ name: z.string().trim().min(2).max(160), segment: z.string().trim().min(2).max(80), whatsappConnected: z.boolean().optional().default(false), firstAutomation: z.enum(["risk", "inactive", "none"]).optional().default("none") })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertCanManage(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    await db.update(organizations).set({ name: input.name, segment: input.segment, onboardingCompletedAt: new Date() }).where(eq(organizations.id, organization.id));
+    await db.insert(auditLogs).values({ organizationId: organization.id, actorUserId: ctx.user.id, action: "organization.onboarding_completed", entityType: "organization", entityId: organization.id, metadata: { whatsappConnected: input.whatsappConnected, firstAutomation: input.firstAutomation } });
+    return { success: true } as const;
+  }),
+
   update: protectedProcedure.input(z.object({
     name: z.string().trim().min(2).max(160).optional(),
     segment: z.string().trim().min(2).max(80).optional(),
@@ -133,6 +143,18 @@ export const organizationRouter = router({
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(organizationMembers).set({ role: input.role }).where(and(eq(organizationMembers.id, input.memberId), eq(organizationMembers.organizationId, organization.id)));
     return { success: true };
+  }),
+
+  removeMember: protectedProcedure.input(z.object({ memberId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const { organization, membership } = await orgFor(ctx);
+    assertOwner(membership.role);
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const target = (await db.select().from(organizationMembers).where(and(eq(organizationMembers.id, input.memberId), eq(organizationMembers.organizationId, organization.id))).limit(1))[0];
+    if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Membro não encontrado." });
+    if (target.role === "owner") throw new TRPCError({ code: "FORBIDDEN", message: "O proprietário não pode ser removido." });
+    await db.delete(organizationMembers).where(and(eq(organizationMembers.id, input.memberId), eq(organizationMembers.organizationId, organization.id)));
+    return { success: true } as const;
   }),
 });
 

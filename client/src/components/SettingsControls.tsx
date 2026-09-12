@@ -17,15 +17,20 @@ type Plan = (typeof paidPlans)[number];
 export function PlanManager({ currentPlan }: { currentPlan?: string }) {
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState<Plan>(paidPlans.includes(currentPlan as Plan) ? currentPlan as Plan : "professional");
+  const [showAdminOverride, setShowAdminOverride] = useState(false);
   const utils = trpc.useUtils();
+  const checkout = trpc.organization.createPlanCheckout.useMutation({
+    onSuccess: data => { if (data.checkoutUrl) { window.location.href = data.checkoutUrl; } else { toast.success("Checkout criado."); } },
+    onError: error => toast.error(error.message),
+  });
   const changePlan = trpc.organization.changePlan.useMutation({
-    onSuccess: data => { toast.success(data.changed ? "Plano alterado com sucesso. Nenhum pagamento foi solicitado." : "Este plano já está ativo."); setOpen(false); utils.organization.current.invalidate(); },
+    onSuccess: data => { toast.success(data.changed ? "Plano ajustado sem cobrança (uso administrativo)." : "Este plano já está ativo."); setOpen(false); utils.organization.current.invalidate(); },
     onError: error => toast.error(error.message),
   });
   useEffect(() => { if (currentPlan && paidPlans.includes(currentPlan as Plan)) setPlan(currentPlan as Plan); }, [currentPlan]);
   return <>
     <button onClick={() => setOpen(true)} className="mt-5 text-xs font-semibold text-[#d8ff70]">Gerenciar plano <ChevronRight className="inline h-3.5 w-3.5" /></button>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Gerenciar plano</DialogTitle><DialogDescription>Escolha o plano operacional da organização. A alteração é administrativa e não exige pagamento.</DialogDescription></DialogHeader><div className="grid gap-2 py-3"><Label>Plano desejado</Label><Select value={plan} onValueChange={value => setPlan(value as Plan)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{paidPlans.map(item => <SelectItem key={item} value={item}>{planNames[item]} — {planLimits[item]}</SelectItem>)}</SelectContent></Select><p className="text-xs text-[#748077]">A mudança entra em vigor imediatamente e fica registrada na auditoria.</p></div><DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button><Button onClick={() => changePlan.mutate({ plan })} disabled={changePlan.isPending} className="bg-[#1a3021]">{changePlan.isPending ? "Salvando…" : "Alterar plano"}</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Gerenciar plano</DialogTitle><DialogDescription>Escolha o plano da organização. A assinatura recorrente é processada pelo Asaas.</DialogDescription></DialogHeader><div className="grid gap-2 py-3"><Label>Plano desejado</Label><Select value={plan} onValueChange={value => setPlan(value as Plan)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{paidPlans.map(item => <SelectItem key={item} value={item}>{planNames[item]} — {planLimits[item]}</SelectItem>)}</SelectContent></Select><p className="text-xs text-[#748077]">Você será redirecionado ao checkout seguro do Asaas para confirmar a assinatura recorrente.</p></div><DialogFooter className="flex-col items-stretch gap-2 sm:flex-col"><Button onClick={() => checkout.mutate({ plan })} disabled={checkout.isPending} className="w-full bg-[#1a3021]">{checkout.isPending ? "Abrindo checkout…" : `Assinar ${planNames[plan]} via Asaas`}</Button><div className="flex items-center justify-between pt-1"><Button variant="ghost" size="sm" onClick={() => setOpen(false)} className="text-xs">Cancelar</Button><button type="button" onClick={() => setShowAdminOverride(v => !v)} className="text-[10px] text-[#9aa59d] underline-offset-2 hover:underline">Ajuste administrativo</button></div>{showAdminOverride && <div className="rounded-xl border border-dashed border-[#dfe5dc] p-3"><p className="text-[10px] leading-4 text-[#8b978e]">Uso interno: altera o plano imediatamente sem cobrança no Asaas. Fica registrado na auditoria.</p><Button variant="outline" size="sm" onClick={() => changePlan.mutate({ plan })} disabled={changePlan.isPending} className="mt-2 h-8 text-[11px]">{changePlan.isPending ? "Salvando…" : "Aplicar sem cobrança"}</Button></div>}</DialogFooter></DialogContent></Dialog>
   </>;
 }
 

@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
+import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { HendersonLogo } from "@/components/HendersonLogo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -11,7 +14,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
 const sections = [
-  { label: "Visão geral", items: [{ icon: LayoutDashboard, label: "Painel", path: "/app" }] },
+  { label: "Visão geral", items: [{ icon: LayoutDashboard, label: "Painel", path: "/app" }, { icon: Sparkles, label: "Henderson AI", path: "/app/ai" }] },
   { label: "Relacionamento", items: [
     { icon: Users, label: "Clientes", path: "/app/clientes" },
     { icon: Workflow, label: "CRM", path: "/app/crm" },
@@ -31,6 +34,8 @@ const sections = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
+  const organization = trpc.organization.current.useQuery(undefined, { enabled: !!user });
+  const [dismissed, setDismissed] = useState(false);
   if (loading) return <DashboardLayoutSkeleton />;
   if (!user) {
     return <div className="grid min-h-screen place-items-center bg-[#f7f8f5] px-6">
@@ -45,9 +50,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </div>;
   }
+  const showOnboarding = !dismissed && !!organization.data && !organization.data.organization.onboardingCompletedAt;
   return <SidebarProvider defaultOpen className="min-w-0">
     <AppSidebar />
     <SidebarInset className="min-w-0 max-w-full overflow-x-hidden bg-[#f7f8f5] pt-14 md:pt-0">{children}</SidebarInset>
+    {showOnboarding && <OnboardingWizard organizationId={organization.data!.organization.id} name={organization.data!.organization.name} segment={organization.data!.organization.segment} onDone={() => setDismissed(true)} />}
   </SidebarProvider>;
 }
 

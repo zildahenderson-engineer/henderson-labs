@@ -34,6 +34,7 @@ export const organizations = mysqlTable("organizations", {
   activeDays: int("activeDays").default(30).notNull(),
   riskDays: int("riskDays").default(60).notNull(),
   timezone: varchar("timezone", { length: 64 }).default("America/Sao_Paulo").notNull(),
+  onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -247,6 +248,38 @@ export const billingPayments = mysqlTable("billing_payments", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [index("billing_org_status_idx").on(table.organizationId, table.status), uniqueIndex("billing_provider_payment_unique").on(table.providerPaymentId), index("billing_event_idx").on(table.lastEventId)]);
+
+
+/** Henderson AI conversations, scoped to an organization and authenticated user. */
+export const aiConversations = mysqlTable("ai_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 160 }).default("Nova conversa").notNull(),
+  lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("ai_conversation_org_user_idx").on(table.organizationId, table.userId, table.lastMessageAt)]);
+
+export const aiMessages = mysqlTable("ai_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  conversationId: int("conversationId").notNull(),
+  role: mysqlEnum("role", ["user", "assistant"]).notNull(),
+  content: text("content").notNull(),
+  toolsUsed: json("toolsUsed"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("ai_message_conversation_idx").on(table.conversationId, table.createdAt)]);
+
+export const aiUsage = mysqlTable("ai_usage", {
+  id: int("id").autoincrement().primaryKey(),
+  organizationId: int("organizationId").notNull(),
+  userId: int("userId").notNull(),
+  conversationId: int("conversationId"),
+  promptTokens: int("promptTokens").default(0).notNull(),
+  completionTokens: int("completionTokens").default(0).notNull(),
+  model: varchar("model", { length: 120 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("ai_usage_org_created_idx").on(table.organizationId, table.createdAt)]);
 
 export const asaasWebhookEvents = mysqlTable("asaas_webhook_events", {
   id: int("id").autoincrement().primaryKey(),
