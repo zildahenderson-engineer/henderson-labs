@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { trpc } from "@/lib/trpc";
 
 const planNames = { basic: "Básico", professional: "Profissional", premium: "Premium" } as const;
-const planLimits = { basic: "R$ 49,90/mês · 500 clientes · 3 automações · 2 usuários", professional: "R$ 129,90/mês · 3.000 clientes · 10 automações · 5 usuários", premium: "R$ 299,90/mês · 10.000 clientes · 30 automações · 15 usuários" } as const;
+const planLimits = { basic: "R$ 650/mês · 500 clientes · 3 automações · 2 usuários", professional: "Plano intermediário · 3.000 clientes · 10 automações · 5 usuários", premium: "R$ 1.650/mês · 10.000 clientes · 30 automações · 15 usuários" } as const;
 const paidPlans = ["basic", "professional", "premium"] as const;
 
 type Plan = (typeof paidPlans)[number];

@@ -78,10 +78,10 @@ A estrutura de planos está pronta para limitar clientes, automações e usuári
 
 | Plano | Preço de referência | Clientes | Automações | Usuários |
 | --- | ---: | ---: | ---: | ---: |
-| Básico | R$ 500/mês | 500 | 3 | 2 |
+| Básico | R$ 650/mês | 500 | 3 | 2 |
 | Profissional | R$ 900/mês | 3.000 | 10 | 5 |
-| Premium | R$ 1.500/mês | 10.000 | 30 | 15 |
-| Enterprise | A partir de R$ 2.500/mês | Conforme contrato | Conforme contrato | Conforme contrato |
+| Premium | R$ 1.650/mês | 10.000 | 30 | 15 |
+| Enterprise | A partir de R$ 2.350/mês | Conforme contrato | Conforme contrato | Conforme contrato |
 
 O gerenciamento de plano está disponível para o proprietário em Configurações. A ação principal cria um checkout hospedado pelo Asaas e só muda o plano após o evento de pagamento confirmado; o ajuste administrativo sem cobrança permanece separado e auditado para suporte interno.
 

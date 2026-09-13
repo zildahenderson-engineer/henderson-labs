@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-export const ASAAS_PLAN_PRICES = { basic: 49.9, professional: 129.9, premium: 299.9 } as const;
+export const ASAAS_PLAN_PRICES = { basic: 650, professional: 129.9, premium: 1650 } as const;
 export type PaidPlan = keyof typeof ASAAS_PLAN_PRICES;
 
 function apiBase() {
